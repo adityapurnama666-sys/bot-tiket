@@ -4,7 +4,7 @@ import sqlite3
 from datetime import datetime
 import pandas as pd
 
-TOKEN = "ISI_TOKEN_KAMU"
+TOKEN = "8761554944:AAGTPWakEokGZK_cVpMVs_EQD_LFxYfpVco"
 
 # koneksi database
 conn = sqlite3.connect("data.db", check_same_thread=False)
