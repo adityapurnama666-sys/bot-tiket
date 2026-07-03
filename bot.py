@@ -1,8 +1,13 @@
+import os
+import logging
 from telegram import Update, ReplyKeyboardMarkup
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters, ContextTypes
 import sqlite3
 from datetime import datetime
 import pandas as pd
+
+# logging (biar gampang debug di server)
+logging.basicConfig(level=logging.INFO)
 
 TOKEN = "8761554944:AAGTPWakEokGZK_cVpMVs_EQD_LFxYfpVco"
 
@@ -21,7 +26,7 @@ CREATE TABLE IF NOT EXISTS tiket (
 """)
 conn.commit()
 
-# kategori
+# kategori & bobot
 BOBOT = {
     "REGULER_HSI": 2,
     "REGULER_OLO": 4,
@@ -82,8 +87,10 @@ async def handle(update: Update, context: ContextTypes.DEFAULT_TYPE):
         bobot = BOBOT[kategori]
         tanggal = datetime.now().strftime("%Y-%m-%d")
 
-        cursor.execute("INSERT INTO tiket VALUES (?, ?, ?, ?, ?)",
-                       (user_id, tanggal, tiket, kategori, bobot))
+        cursor.execute(
+            "INSERT INTO tiket VALUES (?, ?, ?, ?, ?)",
+            (user_id, tanggal, tiket, kategori, bobot)
+        )
         conn.commit()
 
         context.user_data.clear()
@@ -104,7 +111,16 @@ async def handle(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await export_excel(update, user_id)
 
 async def laporan(update, user_id, tipe):
-    df = pd.read_sql_query("SELECT * FROM tiket WHERE user_id=?", conn, params=(user_id,))
+    df = pd.read_sql_query(
+        "SELECT * FROM tiket WHERE user_id=?",
+        conn,
+        params=(user_id,)
+    )
+
+    if df.empty:
+        await update.message.reply_text("Belum ada data", reply_markup=menu())
+        return
+
     df["tanggal"] = pd.to_datetime(df["tanggal"])
     now = datetime.now()
 
@@ -129,7 +145,11 @@ async def laporan(update, user_id, tipe):
     await update.message.reply_text(text, reply_markup=menu())
 
 async def export_excel(update, user_id):
-    df = pd.read_sql_query("SELECT * FROM tiket WHERE user_id=?", conn, params=(user_id,))
+    df = pd.read_sql_query(
+        "SELECT * FROM tiket WHERE user_id=?",
+        conn,
+        params=(user_id,)
+    )
 
     if df.empty:
         await update.message.reply_text("Tidak ada data")
@@ -138,14 +158,15 @@ async def export_excel(update, user_id):
     file_name = f"laporan_{user_id}.xlsx"
     df.to_excel(file_name, index=False)
 
-    await update.message.reply_document(open(file_name, "rb"))
+    # kirim file (aman)
+    with open(file_name, "rb") as f:
+        await update.message.reply_document(f)
 
+# ===== MAIN APP =====
 app = ApplicationBuilder().token(TOKEN).build()
 
 app.add_handler(CommandHandler("start", start))
 app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle))
-
-import os
 
 if __name__ == "__main__":
     app.run_polling()
